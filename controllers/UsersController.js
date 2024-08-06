@@ -1,7 +1,8 @@
 // controllers/UsersController.js
+const sha1 = require('sha1');
+const { ObjectId } = require('mongodb');
 const dbClient = require('../utils/db');
 const redisClient = require('../utils/redis');
-const sha1 = require('sha1');
 
 class UsersController {
   static async postNew(req, res) {

@@ -1,7 +1,6 @@
 // controllers/FilesController.js
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const mime = require('mime-types');
 const path = require('path');
 const { ObjectId } = require('mongodb');
 const dbClient = require('../utils/db');
@@ -160,6 +159,84 @@ class FilesController {
     }));
 
     return res.status(200).json(response);
+  }
+
+  static async putPublish(req, res) {
+    const token = req.header('X-Token');
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const userId = await redisClient.get(`auth_${token}`);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+    const fileDocument = await dbClient.db.collection('files').findOne({
+      _id: new ObjectId(fileId),
+      userId: new ObjectId(userId),
+    });
+
+    if (!fileDocument) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    await dbClient.db.collection('files').updateOne(
+      { _id: new ObjectId(fileId) },
+      { $set: { isPublic: true } },
+    );
+
+    fileDocument.isPublic = true;
+
+    return res.status(200).json({
+      id: fileDocument._id,
+      userId: fileDocument.userId,
+      name: fileDocument.name,
+      type: fileDocument.type,
+      isPublic: fileDocument.isPublic,
+      parentId: fileDocument.parentId,
+      localPath: fileDocument.localPath,
+    });
+  }
+
+  static async putUnpublish(req, res) {
+    const token = req.header('X-Token');
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const userId = await redisClient.get(`auth_${token}`);
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const fileId = req.params.id;
+    const fileDocument = await dbClient.db.collection('files').findOne({
+      _id: new ObjectId(fileId),
+      userId: new ObjectId(userId),
+    });
+
+    if (!fileDocument) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+
+    await dbClient.db.collection('files').updateOne(
+      { _id: new ObjectId(fileId) },
+      { $set: { isPublic: false } },
+    );
+
+    fileDocument.isPublic = false;
+
+    return res.status(200).json({
+      id: fileDocument._id,
+      userId: fileDocument.userId,
+      name: fileDocument.name,
+      type: fileDocument.type,
+      isPublic: fileDocument.isPublic,
+      parentId: fileDocument.parentId,
+      localPath: fileDocument.localPath,
+    });
   }
 }
 

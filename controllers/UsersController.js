@@ -38,7 +38,7 @@ class UsersController {
     // Add job to userQueue
     await userQueue.add({ userId: userId.toString() });
 
-    return res.status(201).json({ id: userId, email });
+    return res.status(201).json({ id: result.insertedId, email });
   }
 
   static async getMe(req, res) {

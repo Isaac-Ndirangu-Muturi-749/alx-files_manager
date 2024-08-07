@@ -1,8 +1,11 @@
 // controllers/UsersController.js
+const Bull = require('bull');
 const sha1 = require('sha1');
 const { ObjectId } = require('mongodb');
 const dbClient = require('../utils/db');
 const redisClient = require('../utils/redis');
+
+const userQueue = new Bull('userQueue');
 
 class UsersController {
   static async postNew(req, res) {
@@ -17,16 +20,25 @@ class UsersController {
     }
 
     const usersCollection = dbClient.db.collection('users');
-    const existingUser = await usersCollection.findOne({ email });
 
-    if (existingUser) {
-      return res.status(400).json({ error: 'Already exist' });
+    const userExists = await usersCollection.findOne({ email });
+    if (userExists) {
+      return res.status(400).json({ error: 'Already exists' });
     }
 
     const hashedPassword = sha1(password);
-    const result = await usersCollection.insertOne({ email, password: hashedPassword });
+    const user = {
+      email,
+      password: hashedPassword,
+    };
 
-    return res.status(201).json({ id: result.insertedId, email });
+    const result = await usersCollection.insertOne(user);
+    const userId = result.insertedId;
+
+    // Add job to userQueue
+    await userQueue.add({ userId: userId.toString() });
+
+    return res.status(201).json({ id: userId, email });
   }
 
   static async getMe(req, res) {

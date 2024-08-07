@@ -4,8 +4,11 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { ObjectId } = require('mongodb');
 const mime = require('mime-types');
+const Bull = require('bull');
 const dbClient = require('../utils/db');
 const redisClient = require('../utils/redis');
+
+const fileQueue = new Bull('fileQueue');
 
 class FilesController {
   static async postUpload(req, res) {
@@ -80,6 +83,14 @@ class FilesController {
     fileDocument.localPath = localPath;
 
     const result = await filesCollection.insertOne(fileDocument);
+
+    // Add job to queue if the file is an image
+    if (fileDocument.type === 'image') {
+      await fileQueue.add({
+        userId: user._id.toString(),
+        fileId: fileDocument._id.toString(),
+      });
+    }
 
     return res.status(201).json({
       id: result.insertedId,
@@ -243,6 +254,7 @@ class FilesController {
   static async getFile(req, res) {
     const token = req.header('X-Token');
     const fileId = req.params.id;
+    const { size } = req.query;
 
     const fileDocument = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId) });
 
@@ -267,7 +279,11 @@ class FilesController {
       }
     }
 
-    const { localPath } = fileDocument;
+    let { localPath } = fileDocument;
+
+    if (size) {
+      localPath = `${localPath}_${size}`;
+    }
 
     if (!fs.existsSync(localPath)) {
       return res.status(404).json({ error: 'Not found' });

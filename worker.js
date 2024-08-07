@@ -1,43 +1,63 @@
 // worker.js
 const Bull = require('bull');
-const fs = require('fs');
-const imageThumbnail = require('image-thumbnail');
 const { ObjectId } = require('mongodb');
 const dbClient = require('./utils/db');
 
+const userQueue = new Bull('userQueue');
 const fileQueue = new Bull('fileQueue');
 
+userQueue.process(async (job, done) => {
+  const { userId } = job.data;
+
+  if (!userId) {
+    return done(new Error('Missing userId'));
+  }
+
+  const user = await dbClient.db.collection('users').findOne({ _id: new ObjectId(userId) });
+
+  if (!user) {
+    return done(new Error('User not found'));
+  }
+
+  console.log(`Welcome ${user.email}!`);
+  done();
+});
+
 fileQueue.process(async (job, done) => {
-  const { fileId, userId } = job.data;
+  const { userId, fileId } = job.data;
 
   if (!fileId) {
-    throw new Error('Missing fileId');
+    return done(new Error('Missing fileId'));
   }
 
   if (!userId) {
-    throw new Error('Missing userId');
+    return done(new Error('Missing userId'));
   }
 
-  const fileDocument = await dbClient.db.collection('files').findOne({ _id: new ObjectId(fileId), userId: new ObjectId(userId) });
+  const fileDocument = await dbClient.db.collection('files').findOne({
+    _id: new ObjectId(fileId),
+    userId: new ObjectId(userId),
+  });
 
   if (!fileDocument) {
-    throw new Error('File not found');
+    return done(new Error('File not found'));
   }
 
-  const { localPath } = fileDocument;
-  const sizes = [500, 250, 100];
+  const imageThumbnail = require('image-thumbnail');
 
-  for (const size of sizes) {
-    try {
-      const thumbnail = await imageThumbnail(localPath, { width: size });
-      const thumbnailPath = `${localPath}_${size}`;
-      fs.writeFileSync(thumbnailPath, thumbnail);
-    } catch (error) {
-      console.error(`Error generating thumbnail for size ${size}:`, error);
-    }
+  try {
+    const thumbnail500 = await imageThumbnail(fileDocument.localPath, { width: 500 });
+    const thumbnail250 = await imageThumbnail(fileDocument.localPath, { width: 250 });
+    const thumbnail100 = await imageThumbnail(fileDocument.localPath, { width: 100 });
+
+    fs.writeFileSync(`${fileDocument.localPath}_500`, thumbnail500);
+    fs.writeFileSync(`${fileDocument.localPath}_250`, thumbnail250);
+    fs.writeFileSync(`${fileDocument.localPath}_100`, thumbnail100);
+
+    done();
+  } catch (error) {
+    done(error);
   }
-
-  done();
 });
 
 console.log('Worker started');

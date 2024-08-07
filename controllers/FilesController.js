@@ -87,7 +87,7 @@ class FilesController {
     // Add job to queue if the file is an image
     if (fileDocument.type === 'image') {
       await fileQueue.add({
-        userId: user._id.toString(),
+        userId: userId.toString(),
         fileId: fileDocument._id.toString(),
       });
     }
@@ -279,21 +279,18 @@ class FilesController {
       }
     }
 
-    let { localPath } = fileDocument;
-
+    let filePath = fileDocument.localPath;
     if (size) {
-      localPath = `${localPath}_${size}`;
+      filePath = `${filePath}_${size}`;
     }
 
-    if (!fs.existsSync(localPath)) {
-      return res.status(404).json({ error: 'Not found' });
+    if (fs.existsSync(filePath)) {
+      const fileType = mime.contentType(fileDocument.name);
+      res.setHeader('Content-Type', fileType);
+      return res.status(200).sendFile(filePath);
     }
 
-    const mimeType = mime.lookup(fileDocument.name);
-    res.setHeader('Content-Type', mimeType);
-
-    const fileStream = fs.createReadStream(localPath);
-    fileStream.pipe(res);
+    return res.status(404).json({ error: 'Not found' });
   }
 }
 
